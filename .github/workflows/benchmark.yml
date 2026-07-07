@@ -1,0 +1,96 @@
+name: Biweekly KleidiCV benchmark
+
+# Runs on the 1st and 15th of every month (~every two weeks) and on demand.
+on:
+  schedule:
+    - cron: "0 3 1,15 * *"
+  workflow_dispatch:
+
+jobs:
+  benchmark:
+    runs-on: ubuntu-26.04-arm
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 1
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential cmake ninja-build git patch \
+            python3 python3-venv python3-pip
+
+      - name: Set up Python virtual environment
+        run: |
+          python3 -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Build KleidiCV, OpenCV 4 and OpenCV 5 (w/ and w/o KleidiCV)
+        run: |
+          bash build.sh build -j "$(nproc)"
+
+      - name: Run benchmarks
+        run: |
+          . .venv/bin/activate
+          mkdir -p results
+
+          # --- Individual benchmark runs -----------------------------------
+          # OpenCV 4 without KleidiCV (baseline for case 1)
+          python3 benchmark.py run --opencv-build build-opencv-4 \
+            --threads 2 \
+            --output results/opencv4-baseline.tsv
+          # OpenCV 4 with KleidiCV (candidate for case 1, baseline for case 3)
+          python3 benchmark.py run --opencv-build build-opencv-4-kcv \
+            --threads 2 \
+            --output results/opencv4-kcv.tsv
+          # OpenCV 5 without KleidiCV (baseline for case 2)
+          python3 benchmark.py run --opencv-build build-opencv-5 \
+            --threads 2 \
+            --output results/opencv5-baseline.tsv
+          # OpenCV 5 with KleidiCV (candidate for case 2 and 3)
+          python3 benchmark.py run --opencv-build build-opencv-5-kcv \
+            --threads 2 \
+            --output results/opencv5-kcv.tsv
+
+      - name: Compare results
+        run: |
+          . .venv/bin/activate
+
+          # Case 1: OpenCV 4 without (baseline) vs with (candidate) KleidiCV
+          python3 benchmark.py compare \
+            --baseline results/opencv4-baseline.tsv \
+            --candidate results/opencv4-kcv.tsv \
+            --output results/opencv4-with-vs-without-kcv.png \
+            --title "OpenCV 4: without vs with KleidiCV"
+
+          # Case 2: OpenCV 5 without (baseline) vs with (candidate) KleidiCV
+          python3 benchmark.py compare \
+            --baseline results/opencv5-baseline.tsv \
+            --candidate results/opencv5-kcv.tsv \
+            --output results/opencv5-with-vs-without-kcv.png \
+            --title "OpenCV 5: without vs with KleidiCV"
+
+          # Case 3: OpenCV 4 (baseline) vs OpenCV 5 (candidate), both with KleidiCV
+          python3 benchmark.py compare \
+            --baseline results/opencv4-kcv.tsv \
+            --candidate results/opencv5-kcv.tsv \
+            --output results/opencv4-vs-opencv5-kcv.png \
+            --title "OpenCV 4 vs OpenCV 5 (both with KleidiCV)"
+
+      - name: Upload benchmark artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kleidicv-benchmark-results
+          path: |
+            results/*.tsv
+            results/*.png
+          if-no-files-found: warn
+          retention-days: 90
