@@ -1,0 +1,11 @@
+[submodule "kleidicv"]
+	path = kleidicv
+	url = https://gitlab.arm.com/kleidi/kleidicv.git
+[submodule "opencv-4"]
+	path = opencv-4
+	url = https://github.com/opencv/opencv.git
+	branch = 4.x
+[submodule "opencv-5"]
+	path = opencv-5
+	url = https://github.com/opencv/opencv.git
+	branch = 5.x

@@ -1,0 +1,884 @@
+diff --git a/modules/core/perf/perf_arithm.cpp b/modules/core/perf/perf_arithm.cpp
+index 54053fd65209..7a3fa923300b 100644
+--- a/modules/core/perf/perf_arithm.cpp
++++ b/modules/core/perf/perf_arithm.cpp
+@@ -460,7 +460,7 @@ PERF_TEST_P_(BinaryOpTest, transposeND)
+ 
+ INSTANTIATE_TEST_CASE_P(/*nothing*/ , BinaryOpTest,
+     testing::Combine(
+-        testing::Values(szVGA, sz720p, sz1080p),
++        testing::Values(szVGA, sz720p, sz1080p, sz2160p),
+         testing::Values(CV_8UC1, CV_8UC3, CV_8UC4, CV_8SC1, CV_16SC1, CV_16SC2, CV_16SC3, CV_16SC4, CV_32SC1, CV_32FC1)
+     )
+ );
+@@ -761,7 +761,7 @@ PERF_TEST_P_(RotateTest, rotate)
+ 
+ INSTANTIATE_TEST_CASE_P(/*nothing*/ , RotateTest,
+     testing::Combine(
+-        testing::Values(szVGA, sz720p, sz1080p),
++        testing::Values(szVGA, sz720p, sz1080p, sz2160p),
+         testing::Values(ROTATE_180, ROTATE_90_CLOCKWISE, ROTATE_90_COUNTERCLOCKWISE),
+         testing::Values(CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, CV_8SC1, CV_16SC1, CV_16SC2, CV_16SC3, CV_16SC4, CV_32SC1, CV_32FC1)
+     )
+diff --git a/modules/core/perf/perf_compare.cpp b/modules/core/perf/perf_compare.cpp
+index be706e1a83fc..862b8b7c35be 100644
+--- a/modules/core/perf/perf_compare.cpp
++++ b/modules/core/perf/perf_compare.cpp
+@@ -11,7 +11,7 @@ typedef perf::TestBaseWithParam<Size_MatType_CmpType_t> Size_MatType_CmpType;
+ 
+ PERF_TEST_P( Size_MatType_CmpType, compare,
+              testing::Combine(
+-                 testing::Values(::perf::szVGA, ::perf::sz1080p),
++                 testing::Values(::perf::szVGA, ::perf::sz1080p, ::perf::sz2160p),
+                  testing::Values(CV_8UC1, CV_8UC4, CV_8SC1, CV_16UC1, CV_16SC1, CV_32SC1, CV_32FC1),
+                  CmpType::all()
+                  )
+diff --git a/modules/core/perf/perf_convertTo.cpp b/modules/core/perf/perf_convertTo.cpp
+index 344d81cb8a59..08d1f5ed97db 100644
+--- a/modules/core/perf/perf_convertTo.cpp
++++ b/modules/core/perf/perf_convertTo.cpp
+@@ -4,17 +4,18 @@ namespace opencv_test
+ {
+ using namespace perf;
+ 
+-typedef tuple<Size, MatType, MatType, int, double> Size_DepthSrc_DepthDst_Channels_alpha_t;
+-typedef perf::TestBaseWithParam<Size_DepthSrc_DepthDst_Channels_alpha_t> Size_DepthSrc_DepthDst_Channels_alpha;
++typedef tuple<Size, MatType, MatType, int, double, double> Size_DepthSrc_DepthDst_Channels_alpha_beta_t;
++typedef perf::TestBaseWithParam<Size_DepthSrc_DepthDst_Channels_alpha_beta_t> Size_DepthSrc_DepthDst_Channels_alpha_beta;
+ 
+-PERF_TEST_P( Size_DepthSrc_DepthDst_Channels_alpha, convertTo,
++PERF_TEST_P( Size_DepthSrc_DepthDst_Channels_alpha_beta, convertTo,
+              testing::Combine
+              (
+-                 testing::Values(szVGA, sz1080p),
+-                 testing::Values(CV_8U, CV_8S, CV_16U, CV_16S, CV_32S, CV_32F, CV_64F),
+-                 testing::Values(CV_8U, CV_8S, CV_16U, CV_16S, CV_32S, CV_32F, CV_64F),
++                 testing::Values(sz1080p, sz2160p),
++                 testing::Values(CV_8U, CV_8S, CV_16U, CV_16S, CV_32S, CV_16F, CV_32F, CV_64F),
++                 testing::Values(CV_8U, CV_8S, CV_16U, CV_16S, CV_32S, CV_16F, CV_32F, CV_64F),
+                  testing::Values(1, 4),
+-                 testing::Values(1.0, 1./255)
++                 testing::Values(1.0, 1./255, 1.234),
++                 testing::Values(0, 4.567)
+              )
+            )
+ {
+@@ -23,6 +24,7 @@ PERF_TEST_P( Size_DepthSrc_DepthDst_Channels_alpha, convertTo,
+     int depthDst = get<2>(GetParam());
+     int channels = get<3>(GetParam());
+     double alpha = get<4>(GetParam());
++    double beta = get<5>(GetParam());
+ 
+     int maxValue = 255;
+ 
+@@ -31,7 +33,7 @@ PERF_TEST_P( Size_DepthSrc_DepthDst_Channels_alpha, convertTo,
+     Mat dst(sz, CV_MAKETYPE(depthDst, channels));
+ 
+     int runs = (sz.width <= 640) ? 8 : 1;
+-    TEST_CYCLE_MULTIRUN(runs) src.convertTo(dst, depthDst, alpha);
++    TEST_CYCLE_MULTIRUN(runs) src.convertTo(dst, depthDst, alpha, beta);
+ 
+     double eps = depthSrc <= CV_32S && (depthDst <= CV_32S || depthDst == CV_64F) ? 1e-12 : (FLT_EPSILON * maxValue);
+     eps = eps * std::max(1.0, fabs(alpha));
+diff --git a/modules/core/perf/perf_exp.cpp b/modules/core/perf/perf_exp.cpp
+new file mode 100644
+index 000000000000..6b20e19a0cec
+--- /dev/null
++++ b/modules/core/perf/perf_exp.cpp
+@@ -0,0 +1,59 @@
++#include "perf_precomp.hpp"
++
++namespace opencv_test
++{
++using namespace perf;
++
++typedef perf::TestBaseWithParam<Size_MatType_t> Exp;
++
++PERF_TEST_P( Exp, ExpAnyInput,
++             testing::Combine
++             (
++                 testing::Values(sz1080p, sz2160p),
++                 testing::Values(CV_32FC4)
++             )
++           )
++{
++    cv::RNG rng(0);
++
++    Size sz = get<0>(GetParam());
++    int type = get<1>(GetParam());
++
++    Mat src(sz, type);
++    Mat dst(sz, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() cv::exp(src, dst);
++
++    SANITY_CHECK(dst);
++}
++
++PERF_TEST_P( Exp, ExpSmallInput,
++             testing::Combine
++             (
++                 testing::Values(sz1080p, sz2160p),
++                 testing::Values(CV_32F)
++             )
++           )
++{
++    cv::RNG rng(0);
++
++    Size sz = get<0>(GetParam());
++    int type = get<1>(GetParam());
++
++    Mat src(sz, type);
++    Mat dst(sz, type);
++
++    // Keping input values in a range where output's 1st derivative is
++    // manageable (0.001 < exp'(x) < 1000)
++    rng.fill(src, cv::RNG::UNIFORM, -7.0, 7.0);
++
++    declare.out(dst);
++
++    TEST_CYCLE() cv::exp(src, dst);
++
++    SANITY_CHECK(dst);
++}
++
++} // namespace
+diff --git a/modules/core/perf/perf_inRangeScalar.cpp b/modules/core/perf/perf_inRangeScalar.cpp
+new file mode 100644
+index 000000000000..9ecca30b6cda
+--- /dev/null
++++ b/modules/core/perf/perf_inRangeScalar.cpp
+@@ -0,0 +1,34 @@
++#include "perf_precomp.hpp"
++
++namespace opencv_test
++{
++using namespace perf;
++
++typedef tuple<Size, MatType, double, double> Size_TypeSrc_lb_ub_t;
++typedef perf::TestBaseWithParam<Size_TypeSrc_lb_ub_t> Size_TypeSrc_lb_ub;
++
++PERF_TEST_P( Size_TypeSrc_lb_ub, inRangeScalar,
++             testing::Combine
++             (
++                 testing::Values(sz1080p, sz2160p),
++                 testing::Values(CV_8UC1, CV_32FC1),
++                 testing::Values(1),
++                 testing::Values(2)
++             )
++           )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    Mat lb (1, 1, type, get<2>(GetParam()));
++    Mat ub (1, 1, type, get<3>(GetParam()));
++    Mat src(size, type);
++    Mat dst(size, CV_8UC1);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() inRange( src, lb, ub, dst );
++
++    SANITY_CHECK(dst);
++}
++
++} // namespace
+diff --git a/modules/core/perf/perf_minMaxIdx.cpp b/modules/core/perf/perf_minMaxIdx.cpp
+new file mode 100644
+index 000000000000..b5c4ddad05d7
+--- /dev/null
++++ b/modules/core/perf/perf_minMaxIdx.cpp
+@@ -0,0 +1,34 @@
++#include "perf_precomp.hpp"
++
++namespace opencv_test
++{
++using namespace perf;
++
++PERF_TEST_P(Size_MatType, minMaxVals, testing::Combine(
++                 testing::Values(TYPICAL_MAT_SIZES),
++                 testing::Values(CV_8UC1, CV_8SC1, CV_16UC1, CV_16SC1, CV_32SC1, CV_32FC1)
++                 )
++             )
++{
++    Size sz = get<0>(GetParam());
++    int matType = get<1>(GetParam());
++
++    Mat src(sz, matType);
++    double minVal, maxVal;
++
++    if (matType == CV_8U)
++        randu(src, 1, 254 /*do not include 0 and 255 to avoid early exit on 1 byte data*/);
++    else if (matType == CV_8S)
++        randu(src, -127, 126);
++    else
++        warmup(src, WARMUP_RNG);
++
++    declare.in(src);
++
++    TEST_CYCLE() cv::minMaxIdx(src, &minVal, &maxVal, nullptr, nullptr);
++
++    SANITY_CHECK(minVal, 1e-12);
++    SANITY_CHECK(maxVal, 1e-12);
++}
++
++} // namespace
+diff --git a/modules/core/perf/perf_transpose.cpp b/modules/core/perf/perf_transpose.cpp
+new file mode 100644
+index 000000000000..7c6a4afaf2f0
+--- /dev/null
++++ b/modules/core/perf/perf_transpose.cpp
+@@ -0,0 +1,50 @@
++#include "perf_precomp.hpp"
++
++namespace opencv_test
++{
++using namespace perf;
++
++typedef perf::TestBaseWithParam<Size_MatType_t> Transpose;
++
++PERF_TEST_P( Transpose, Copy,
++             testing::Combine
++             (
++                 testing::Values(sz1080p, sz2160p),
++                 testing::Values(CV_8U, CV_16U, CV_32S, CV_64F)
++             )
++           )
++{
++    Size sz = get<0>(GetParam());
++    int type = get<1>(GetParam());
++
++    Mat src(sz, type);
++    Mat dst(sz, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() cv::transpose(src, dst);
++
++    SANITY_CHECK(dst);
++}
++
++PERF_TEST_P( Transpose, InPlace,
++             testing::Combine
++             (
++                 testing::Values(sz1080p, sz2160p),
++                 testing::Values(CV_8U, CV_16U, CV_32S, CV_64F)
++             )
++           )
++{
++    Size sz = get<0>(GetParam());
++    int type = get<1>(GetParam());
++
++    Mat src(sz, type);
++
++    declare.in(src, WARMUP_RNG);
++
++    TEST_CYCLE() cv::transpose(src, src);
++
++    SANITY_CHECK(src);
++}
++
++} // namespace
+diff --git a/modules/imgproc/perf/perf_blur.cpp b/modules/imgproc/perf/perf_blur.cpp
+index fd649b08c68a..5c491bbb37a2 100644
+--- a/modules/imgproc/perf/perf_blur.cpp
++++ b/modules/imgproc/perf/perf_blur.cpp
+@@ -10,9 +10,9 @@ typedef perf::TestBaseWithParam<Size_MatType_kSize_t> Size_MatType_kSize;
+ 
+ PERF_TEST_P(Size_MatType_kSize, medianBlur,
+             testing::Combine(
+-                testing::Values(szODD, szQVGA, szVGA, sz720p),
++                testing::Values(szODD, szQVGA, szVGA, sz720p, sz1080p, sz2160p),
+                 testing::Values(CV_8UC1, CV_8UC4, CV_16UC1, CV_16SC1, CV_32FC1),
+-                testing::Values(3, 5)
++                testing::Values(3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31, 33, 35)
+                 )
+             )
+ {
+@@ -35,6 +35,7 @@ PERF_TEST_P(Size_MatType_kSize, medianBlur,
+ 
+ CV_ENUM(BorderType3x3, BORDER_REPLICATE, BORDER_CONSTANT)
+ CV_ENUM(BorderType, BORDER_REPLICATE, BORDER_CONSTANT, BORDER_REFLECT, BORDER_REFLECT101)
++CV_ENUM(BorderTypeKleidiCV, BORDER_REPLICATE, BORDER_REFLECT, BORDER_REFLECT101, BORDER_WRAP)
+ 
+ typedef tuple<Size, MatType, BorderType3x3> Size_MatType_BorderType3x3_t;
+ typedef perf::TestBaseWithParam<Size_MatType_BorderType3x3_t> Size_MatType_BorderType3x3;
+@@ -48,10 +49,12 @@ typedef perf::TestBaseWithParam<Size_ksize_BorderType_t> Size_ksize_BorderType;
+ typedef tuple<Size, MatType, BorderType, int> Size_MatType_BorderType_ksize_t;
+ typedef perf::TestBaseWithParam<Size_MatType_BorderType_ksize_t> Size_MatType_BorderType_ksize;
+ 
++typedef tuple<Size, MatType, BorderTypeKleidiCV> Size_MatType_BorderTypeKleidiCV_t;
++typedef perf::TestBaseWithParam<Size_MatType_BorderTypeKleidiCV_t> Size_MatType_BorderTypeKleidiCV;
+ 
+ PERF_TEST_P(Size_MatType_BorderType3x3, gaussianBlur3x3,
+             testing::Combine(
+-                testing::Values(szODD, szQVGA, szVGA, sz720p),
++                testing::Values(szODD, szQVGA, szVGA, sz720p, sz1080p, sz2160p),
+                 testing::Values(CV_8UC1, CV_8UC4, CV_16UC1, CV_16SC1, CV_32FC1),
+                 BorderType3x3::all()
+                 )
+@@ -71,6 +74,28 @@ PERF_TEST_P(Size_MatType_BorderType3x3, gaussianBlur3x3,
+     SANITY_CHECK(dst, 1);
+ }
+ 
++PERF_TEST_P(Size_MatType_BorderType3x3, gaussianBlur3x3_CustomSigma,
++            testing::Combine(
++                testing::Values(szODD, szQVGA, szVGA, sz720p, sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4, CV_16UC1, CV_16SC1, CV_32FC1),
++                BorderType3x3::all()
++                )
++            )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    BorderType3x3 btype = get<2>(GetParam());
++
++    Mat src(size, type);
++    Mat dst(size, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() GaussianBlur(src, dst, Size(3,3), 2.2, 2.2, btype);
++
++    SANITY_CHECK(dst, 1);
++}
++
+ PERF_TEST_P(Size_MatType_BorderType3x3, blur3x3,
+             testing::Combine(
+                 testing::Values(szODD, szQVGA, szVGA, sz720p),
+@@ -198,7 +223,7 @@ PERF_TEST_P(Size_MatType_BorderType_ksize, box_inplace,
+ 
+ PERF_TEST_P(Size_MatType_BorderType, gaussianBlur5x5,
+             testing::Combine(
+-                testing::Values(szODD, szQVGA, szVGA, sz720p),
++                testing::Values(szODD, szQVGA, szVGA, sz720p, sz1080p, sz2160p),
+                 testing::Values(CV_8UC1, CV_8UC4, CV_16UC1, CV_16SC1, CV_32FC1),
+                 BorderType::all()
+                 )
+@@ -218,6 +243,204 @@ PERF_TEST_P(Size_MatType_BorderType, gaussianBlur5x5,
+     SANITY_CHECK(dst, 1);
+ }
+ 
++PERF_TEST_P(Size_MatType_BorderType, gaussianBlur5x5_CustomSigma,
++            testing::Combine(
++                testing::Values(szODD, szQVGA, szVGA, sz720p, sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4, CV_16UC1, CV_16SC1, CV_32FC1),
++                BorderType::all()
++                )
++            )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    BorderType btype = get<2>(GetParam());
++
++    Mat src(size, type);
++    Mat dst(size, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() GaussianBlur(src, dst, Size(5,5), 2.2, 2.2, btype);
++
++    SANITY_CHECK(dst, 1);
++}
++
++PERF_TEST_P(Size_MatType_BorderTypeKleidiCV, gaussianBlur7x7,
++            testing::Combine(
++                testing::Values(sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4),
++                BorderTypeKleidiCV::all()
++                )
++            )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    BorderTypeKleidiCV btype = get<2>(GetParam());
++
++    Mat src(size, type);
++    Mat dst(size, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() GaussianBlur(src, dst, Size(7,7), 0, 0, btype);
++
++    SANITY_CHECK(dst, 1);
++}
++
++PERF_TEST_P(Size_MatType_BorderTypeKleidiCV, gaussianBlur7x7_CustomSigma,
++            testing::Combine(
++                testing::Values(sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4),
++                BorderTypeKleidiCV::all()
++                )
++            )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    BorderTypeKleidiCV btype = get<2>(GetParam());
++
++    Mat src(size, type);
++    Mat dst(size, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() GaussianBlur(src, dst, Size(7,7), 2.2, 2.2, btype);
++
++    SANITY_CHECK(dst, 1);
++}
++
++PERF_TEST_P(Size_MatType_BorderTypeKleidiCV, gaussianBlur15x15,
++            testing::Combine(
++                testing::Values(sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4),
++                BorderTypeKleidiCV::all()
++                )
++            )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    BorderTypeKleidiCV btype = get<2>(GetParam());
++
++    Mat src(size, type);
++    Mat dst(size, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() GaussianBlur(src, dst, Size(15,15), 0, 0, btype);
++
++    SANITY_CHECK(dst, 1);
++}
++
++PERF_TEST_P(Size_MatType_BorderTypeKleidiCV, gaussianBlur9x9,
++            testing::Combine(
++                testing::Values(sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4),
++                BorderTypeKleidiCV::all()
++                )
++            )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    BorderTypeKleidiCV btype = get<2>(GetParam());
++
++    Mat src(size, type);
++    Mat dst(size, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() GaussianBlur(src, dst, Size(9,9), 0, 0, btype);
++
++    SANITY_CHECK(dst, 1);
++}
++
++PERF_TEST_P(Size_MatType_BorderTypeKleidiCV, gaussianBlur9x9_CustomSigma,
++            testing::Combine(
++                testing::Values(sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4),
++                BorderTypeKleidiCV::all()
++                )
++            )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    BorderTypeKleidiCV btype = get<2>(GetParam());
++
++    Mat src(size, type);
++    Mat dst(size, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() GaussianBlur(src, dst, Size(9,9), 2.2, 2.2, btype);
++
++    SANITY_CHECK(dst, 1);
++}
++
++PERF_TEST_P(Size_MatType_BorderTypeKleidiCV, gaussianBlur15x15_CustomSigma,
++            testing::Combine(
++                testing::Values(sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4),
++                BorderTypeKleidiCV::all()
++                )
++            )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    BorderTypeKleidiCV btype = get<2>(GetParam());
++
++    Mat src(size, type);
++    Mat dst(size, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() GaussianBlur(src, dst, Size(15,15), 2.2, 2.2, btype);
++
++    SANITY_CHECK(dst, 1);
++}
++
++PERF_TEST_P(Size_MatType_BorderTypeKleidiCV, gaussianBlur21x21_CustomSigma,
++    testing::Combine(
++        testing::Values(sz1080p, sz2160p),
++        testing::Values(CV_8UC1, CV_8UC4),
++        BorderTypeKleidiCV::all()
++        )
++    )
++{
++Size size = get<0>(GetParam());
++int type = get<1>(GetParam());
++BorderTypeKleidiCV btype = get<2>(GetParam());
++
++Mat src(size, type);
++Mat dst(size, type);
++
++declare.in(src, WARMUP_RNG).out(dst);
++
++TEST_CYCLE() GaussianBlur(src, dst, Size(21,21), 2.2, 2.2, btype);
++
++SANITY_CHECK(dst, 1);
++}
++
++PERF_TEST_P(Size_MatType_BorderTypeKleidiCV, gaussianBlur49x49_CustomSigma,
++            testing::Combine(
++                testing::Values(sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4),
++                BorderTypeKleidiCV::all()
++                )
++            )
++{
++    Size size = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    BorderTypeKleidiCV btype = get<2>(GetParam());
++
++    Mat src(size, type);
++    Mat dst(size, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    TEST_CYCLE() GaussianBlur(src, dst, Size(49,49), 2.2, 2.2, btype);
++
++    SANITY_CHECK(dst, 1);
++}
++
+ PERF_TEST_P(Size_MatType_BorderType, blur5x5,
+             testing::Combine(
+                 testing::Values(szVGA, sz720p),
+diff --git a/modules/imgproc/perf/perf_cvt_color.cpp b/modules/imgproc/perf/perf_cvt_color.cpp
+index 5915b507ceb0..39db6d325122 100644
+--- a/modules/imgproc/perf/perf_cvt_color.cpp
++++ b/modules/imgproc/perf/perf_cvt_color.cpp
+@@ -319,7 +319,7 @@ typedef perf::TestBaseWithParam<Size_CvtMode_t> Size_CvtMode;
+ 
+ PERF_TEST_P(Size_CvtMode, cvtColor8u,
+             testing::Combine(
+-                testing::Values(::perf::szODD, ::perf::szVGA, ::perf::sz1080p),
++                testing::Values(::perf::szODD, ::perf::szVGA, ::perf::sz1080p, ::perf::sz2160p),
+                 CvtMode::all()
+                 )
+             )
+@@ -435,7 +435,7 @@ typedef perf::TestBaseWithParam<Size_CvtMode2_t> Size_CvtMode2;
+ 
+ PERF_TEST_P(Size_CvtMode2, cvtColorYUV420,
+             testing::Combine(
+-                testing::Values(szVGA, sz1080p, Size(130, 60)),
++                testing::Values(szVGA, sz1080p, sz2160p, Size(130, 60)),
+                 CvtMode2::all()
+                 )
+             )
+@@ -460,7 +460,7 @@ typedef perf::TestBaseWithParam<Size_CvtMode3_t> Size_CvtMode3;
+ 
+ PERF_TEST_P(Size_CvtMode3, cvtColorRGB2YUV420p,
+             testing::Combine(
+-                testing::Values(szVGA, sz720p, sz1080p, Size(130, 60)),
++                testing::Values(szVGA, sz720p, sz1080p, sz2160p, Size(130, 60)),
+                 CvtMode3::all()
+                 )
+             )
+diff --git a/modules/imgproc/perf/perf_morph.cpp b/modules/imgproc/perf/perf_morph.cpp
+index dc9e975a21fb..1b73c5eaeebb 100644
+--- a/modules/imgproc/perf/perf_morph.cpp
++++ b/modules/imgproc/perf/perf_morph.cpp
+@@ -39,4 +39,64 @@ PERF_TEST_P(Size_MatType, dilate, TYPICAL_MATS_MORPH)
+     SANITY_CHECK(dst);
+ }
+ 
++typedef tuple<Size, MatType, int> MorphParams_t;
++typedef perf::TestBaseWithParam<MorphParams_t> Erode;
++typedef perf::TestBaseWithParam<MorphParams_t> Dilate;
++
++PERF_TEST_P(Erode, big,
++    testing::Combine(
++        testing::Values(::perf::sz1080p, ::perf::sz2160p),
++        testing::Values(CV_8UC1),
++        testing::Values(3, 5, 17)
++    ))
++{
++    Size sz = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    int kernelSize = get<2>(GetParam());
++
++    Mat src(sz, type);
++    Mat dst(sz, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    const cv::MorphShapes morph_shape = cv::MorphShapes::MORPH_RECT;
++    const cv::Size kernel{kernelSize, kernelSize};
++    const cv::Point anchor{-1, -1};
++
++    cv::Mat element = cv::getStructuringElement(morph_shape, kernel, anchor);
++
++    TEST_CYCLE() erode(src, dst, element, cv::Point(-1, -1), 1,
++                    cv::BorderTypes::BORDER_CONSTANT, cv::Scalar(0xAA));
++
++    SANITY_CHECK(dst);
++}
++
++PERF_TEST_P(Dilate, big,
++    testing::Combine(
++        testing::Values(::perf::sz1080p, ::perf::sz2160p),
++        testing::Values(CV_8UC1),
++        testing::Values(3, 5, 17)
++    ))
++{
++    Size sz = get<0>(GetParam());
++    int type = get<1>(GetParam());
++    int kernelSize = get<2>(GetParam());
++
++    Mat src(sz, type);
++    Mat dst(sz, type);
++
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    const cv::MorphShapes morph_shape = cv::MorphShapes::MORPH_RECT;
++    const cv::Size kernel{kernelSize, kernelSize};
++    const cv::Point anchor{-1, -1};
++
++    cv::Mat element = cv::getStructuringElement(morph_shape, kernel, anchor);
++
++    TEST_CYCLE() dilate(src, dst, element, cv::Point(-1, -1), 1,
++                    cv::BorderTypes::BORDER_CONSTANT, cv::Scalar(0xAA));
++
++    SANITY_CHECK(dst);
++}
++
+ } // namespace
+diff --git a/modules/imgproc/perf/perf_pyramids.cpp b/modules/imgproc/perf/perf_pyramids.cpp
+index 5dd5b9cece93..a96f2a30650d 100644
+--- a/modules/imgproc/perf/perf_pyramids.cpp
++++ b/modules/imgproc/perf/perf_pyramids.cpp
+@@ -6,8 +6,8 @@
+ namespace opencv_test {
+ 
+ PERF_TEST_P(Size_MatType, pyrDown, testing::Combine(
+-                testing::Values(sz1080p, sz720p, szVGA, szQVGA, szODD),
+-                testing::Values(CV_8UC1, CV_8UC3, CV_8UC4, CV_16SC1, CV_16SC3, CV_16SC4, CV_32FC1, CV_32FC3, CV_32FC4)
++                testing::Values(sz1080p, sz720p, szVGA, szQVGA, szODD, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4, CV_16SC1, CV_16SC3, CV_16SC4, CV_32FC1, CV_32FC3, CV_32FC4)
+                 )
+             )
+ {
+diff --git a/modules/imgproc/perf/perf_remap.cpp b/modules/imgproc/perf/perf_remap.cpp
+index 693650ebd832..d14105a787da 100644
+--- a/modules/imgproc/perf/perf_remap.cpp
++++ b/modules/imgproc/perf/perf_remap.cpp
+@@ -6,25 +6,28 @@
+ namespace opencv_test {
+ 
+ CV_ENUM(InterType, INTER_NEAREST, INTER_LINEAR, INTER_CUBIC, INTER_LANCZOS4)
++CV_ENUM(BorderType, BORDER_REPLICATE, BORDER_CONSTANT)
+ 
+-typedef TestBaseWithParam< tuple<Size, MatType, MatType, InterType> > TestRemap;
++typedef TestBaseWithParam< tuple<Size, MatType, MatType, InterType, BorderType> > TestRemap;
+ 
+ PERF_TEST_P( TestRemap, Remap,
+              Combine(
+-                Values( szVGA, sz1080p ),
+-                Values( CV_16UC1, CV_16SC1, CV_32FC1 ),
++                Values( szVGA, sz1080p, sz2160p ),
++                Values( CV_8UC1, CV_8UC2, CV_8UC4, CV_16UC1, CV_16UC2, CV_16UC4, CV_16SC1, CV_32FC1 ),
+                 Values( CV_16SC2, CV_32FC1, CV_32FC2 ),
+-                InterType::all()
++                InterType::all(),
++                BorderType::all()
+              )
+ )
+ {
+     Size sz;
+-    int src_type, map1_type, inter_type;
++    int src_type, map1_type, inter_type, border_type;
+ 
+     sz         = get<0>(GetParam());
+     src_type   = get<1>(GetParam());
+     map1_type  = get<2>(GetParam());
+     inter_type = get<3>(GetParam());
++    border_type = get<4>(GetParam());
+ 
+     Mat src(sz, src_type), dst(sz, src_type), map1(sz, map1_type), map2;
+     if (map1_type == CV_32FC1)
+@@ -62,7 +65,7 @@ PERF_TEST_P( TestRemap, Remap,
+     declare.in(src, WARMUP_RNG).out(dst).time(20);
+ 
+     int runs = (sz.width <= 640) ? 3 : 1;
+-    TEST_CYCLE_MULTIRUN(runs) remap(src, dst, map1, map2, inter_type);
++    TEST_CYCLE_MULTIRUN(runs) remap(src, dst, map1, map2, inter_type, border_type);
+ 
+     if (inter_type == INTER_CUBIC)
+     {
+diff --git a/modules/imgproc/perf/perf_resize.cpp b/modules/imgproc/perf/perf_resize.cpp
+index 67ca928bfa27..958830ac923e 100644
+--- a/modules/imgproc/perf/perf_resize.cpp
++++ b/modules/imgproc/perf/perf_resize.cpp
+@@ -49,7 +49,18 @@ PERF_TEST_P(MatInfo_SizePair, resizeUpLinearNonExact,
+             testing::Combine
+                 (
+                 testing::Values( MATTYPE_NE_VALUES ),
+-                testing::Values( Size_Size_t(szVGA, szqHD), Size_Size_t(szVGA, sz720p) )
++                testing::Values
++                    (
++                    // 2*2
++                    Size_Size_t(szqHD, sz1080p),
++                    Size_Size_t(sz1080p, sz2160p),
++                    // 4*4
++                    Size_Size_t(cv::Size(480, 270), sz1080p),
++                    Size_Size_t(szqHD, sz2160p),
++                    // 8*8
++                    Size_Size_t(cv::Size(240, 135), sz1080p),
++                    Size_Size_t(cv::Size(480, 270), sz2160p)
++                    )
+                 )
+              )
+ {
+@@ -124,7 +135,14 @@ PERF_TEST_P(MatInfo_SizePair, resizeDownLinearNonExact,
+                     Size_Size_t(szqHD, szVGA),
+                     Size_Size_t(sz720p, Size(120 * sz720p.width / sz720p.height, 120)),
+                     Size_Size_t(sz720p, szVGA),
+-                    Size_Size_t(sz720p, szQVGA)
++                    Size_Size_t(sz720p, szQVGA),
++                    Size_Size_t(sz1080p, szqHD),
++                    Size_Size_t(sz1080p, sz720p),
++                    Size_Size_t(sz1080p, szVGA),
++                    Size_Size_t(szWQHD, sz1080p),
++                    Size_Size_t(sz2160p, sz1080p),
++                    Size_Size_t(sz2160p, szWQHD),
++                    Size_Size_t(sz2160p, sz720p)
+                     )
+                 )
+             )
+@@ -155,7 +173,7 @@ typedef TestBaseWithParam<MatInfo_Size_Scale_t> MatInfo_Size_Scale;
+ PERF_TEST_P(MatInfo_Size_Scale, ResizeAreaFast,
+             testing::Combine(
+                 testing::Values(CV_8UC1, CV_8UC3, CV_8UC4, CV_16UC1, CV_16UC3, CV_16UC4),
+-                testing::Values(szVGA, szqHD, sz720p, sz1080p),
++                testing::Values(szVGA, szqHD, sz720p, sz1080p, sz2160p),
+                 testing::Values(2)
+                 )
+             )
+diff --git a/modules/imgproc/perf/perf_sepfilters.cpp b/modules/imgproc/perf/perf_sepfilters.cpp
+index 480aab9f2014..d33a29d5ed0a 100644
+--- a/modules/imgproc/perf/perf_sepfilters.cpp
++++ b/modules/imgproc/perf/perf_sepfilters.cpp
+@@ -5,7 +5,7 @@
+ 
+ namespace opencv_test {
+ 
+-#define FILTER_SRC_SIZES szODD, szQVGA, szVGA
++#define FILTER_SRC_SIZES szODD, szQVGA, szVGA, sz1080p, sz2160p
+ 
+ CV_ENUM(BorderType3x3, BORDER_REPLICATE, BORDER_CONSTANT)
+ CV_ENUM(BorderType3x3ROI, BORDER_DEFAULT, BORDER_REPLICATE|BORDER_ISOLATED, BORDER_CONSTANT|BORDER_ISOLATED)
+@@ -242,4 +242,32 @@ PERF_TEST_P(Size_MatType_dx_dy_Border3x3ROI, scharrViaSobelFilter,
+     SANITY_CHECK(dst);
+ }
+ 
++CV_ENUM(BorderMode_KleidiCV, BORDER_REPLICATE, BORDER_REFLECT, BORDER_REFLECT_101)
++typedef TestBaseWithParam<tuple<Size, MatType, int, BorderMode_KleidiCV>> SepFilter2D_KleidiCV;
++
++PERF_TEST_P(SepFilter2D_KleidiCV, SepFilter2D,
++            testing::Combine(
++                testing::Values(sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC4, CV_16UC1, CV_16UC4, CV_16SC1, CV_16SC4),
++                testing::Values(5),
++                BorderMode_KleidiCV::all()
++            )
++          )
++{
++    const Size srcSize = get<0>(GetParam());
++    const int type = get<1>(GetParam()), ksize = get<2>(GetParam()), borderMode = get<3>(GetParam());
++
++    Mat src(srcSize, type), dst(srcSize, type);
++    declare.in(src, WARMUP_RNG).out(dst);
++
++    Mat kernelX(1, ksize, type);
++    randu(kernelX, -3.0, 3.0);
++    Mat kernelY(1, ksize, type);
++    randu(kernelY, -3.0, 3.0);
++
++    TEST_CYCLE() cv::sepFilter2D(src, dst, -1, kernelX, kernelY, cv::Point(-1, -1), 0.0f, borderMode);
++
++    SANITY_CHECK_NOTHING();
++}
++
+ } // namespace
+diff --git a/modules/imgproc/perf/perf_warp.cpp b/modules/imgproc/perf/perf_warp.cpp
+index b35ef4b5a601..09c3a138b7ed 100644
+--- a/modules/imgproc/perf/perf_warp.cpp
++++ b/modules/imgproc/perf/perf_warp.cpp
+@@ -18,7 +18,7 @@ void update_map(const Mat& src, Mat& map_x, Mat& map_y, bool relative = false );
+ 
+ PERF_TEST_P( TestWarpAffine, WarpAffine,
+              Combine(
+-                Values( szVGA, sz720p, sz1080p ),
++                Values( szVGA, sz720p, sz1080p, sz2160p ),
+                 InterType::all(),
+                 BorderMode::all(),
+                 Values(CV_8UC3, CV_16UC3, CV_32FC3, CV_8UC1, CV_16UC1, CV_32FC1, CV_8UC4, CV_16UC4, CV_32FC4)
+diff --git a/modules/ts/include/opencv2/ts/ts_perf.hpp b/modules/ts/include/opencv2/ts/ts_perf.hpp
+index c2ce7926bb48..4388b7f31032 100644
+--- a/modules/ts/include/opencv2/ts/ts_perf.hpp
++++ b/modules/ts/include/opencv2/ts/ts_perf.hpp
+@@ -78,7 +78,7 @@ const static cv::Size szSmall128 = cv::Size(128, 128);
+ #define SZ_TYPICAL  ::testing::Values(::perf::szVGA, ::perf::szqHD, ::perf::sz720p, ::perf::szODD)
+ 
+ 
+-#define TYPICAL_MAT_SIZES ::perf::szVGA, ::perf::sz720p, ::perf::sz1080p, ::perf::szODD
++#define TYPICAL_MAT_SIZES ::perf::szVGA, ::perf::sz720p, ::perf::sz1080p, ::perf::szODD, ::perf::sz2160p
+ #define TYPICAL_MAT_TYPES CV_8UC1, CV_8UC4, CV_32FC1
+ #define TYPICAL_MATS testing::Combine( testing::Values( TYPICAL_MAT_SIZES ), testing::Values( TYPICAL_MAT_TYPES ) )
+ #define TYPICAL_MATS_C1 testing::Combine( testing::Values( TYPICAL_MAT_SIZES ), testing::Values( CV_8UC1, CV_32FC1 ) )
+diff --git a/modules/video/perf/perf_optflowpyrlk.cpp b/modules/video/perf/perf_optflowpyrlk.cpp
+index aca8a1399bef..4ff055d1b0e8 100644
+--- a/modules/video/perf/perf_optflowpyrlk.cpp
++++ b/modules/video/perf/perf_optflowpyrlk.cpp
+@@ -266,4 +266,32 @@ PERF_TEST_P(Path_Win_Deriv_Border_Reuse, OpticalFlowPyrLK_pyr, testing::Combine(
+     SANITY_CHECK_NOTHING();
+ }
+ 
++typedef perf::TestBaseWithParam<Size_MatType_t> calcScharrDerivParams;
++PERF_TEST_P(calcScharrDerivParams, calcScharrDeriv, testing::Combine(
++                testing::Values(sz1080p, sz2160p),
++                testing::Values(CV_8UC1, CV_8UC2, CV_8UC3, CV_8UC4)
++                )
++            )
++{
++    cv::RNG rng(0);
++
++    Size sz = get<0>(GetParam());
++    int type = get<1>(GetParam());
++
++    Mat src(sz, type);
++    rng.fill(src, cv::RNG::UNIFORM, 0, 256);
++    std::vector<Mat> pyramid;
++
++    // `winSize` is not take into account when `maxLevel` is set to 0.
++    buildOpticalFlowPyramid(src, pyramid, cv::Size(3, 3), 0, true);
++
++    declare.in(src).out(pyramid);
++
++    TEST_CYCLE() {
++        buildOpticalFlowPyramid(src, pyramid, cv::Size(3, 3), 0, true);
++    }
++
++    SANITY_CHECK_NOTHING();
++}
++
+ }} // namespace
